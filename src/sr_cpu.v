@@ -24,8 +24,9 @@ module sr_cpu
     wire        pcSrc;
     wire        regWrite;
     wire        aluSrc;
-    wire        wdSrc;
+    wire  [1:0] wdSrc;
     wire  [2:0] aluControl;
+    wire        exFunc1Start;
 
     //instruction decode wires
     wire [ 6:0] cmdOp;
@@ -39,11 +40,12 @@ module sr_cpu
     wire [31:0] immU;
 
     //program counter
+    wire        busy;
     wire [31:0] pc;
     wire [31:0] pcBranch = pc + immB;
     wire [31:0] pcPlus4  = pc + 4;
     wire [31:0] pcNext   = pcSrc ? pcBranch : pcPlus4;
-    sm_register r_pc(clk ,rst_n, pcNext, pc);
+    sm_register_we r_pc(clk ,rst_n, !busy, pcNext, pc);
 
     //program memory access
     assign imAddr = pc >> 2;
@@ -68,6 +70,7 @@ module sr_cpu
     wire [31:0] rd1;
     wire [31:0] rd2;
     wire [31:0] wd3;
+    wire [31:0] ex_func1_out;
 
     sm_register_file rf (
         .clk        ( clk          ),
@@ -89,6 +92,8 @@ module sr_cpu
     wire [31:0] srcB = aluSrc ? immI : rd2;
     wire [31:0] aluResult;
 
+    assign wd3 = wdSrc == 2'h0 ? aluResult : wdSrc == 2'h1 ? immU : ex_func1_out;
+
     sr_alu alu (
         .srcA       ( rd1          ),
         .srcB       ( srcB         ),
@@ -97,7 +102,7 @@ module sr_cpu
         .result     ( aluResult    ) 
     );
 
-    assign wd3 = wdSrc ? immU : aluResult;
+ 
 
     //control
     sr_control sm_control (
@@ -109,9 +114,18 @@ module sr_cpu
         .regWrite   ( regWrite     ),
         .aluSrc     ( aluSrc       ),
         .wdSrc      ( wdSrc        ),
-        .aluControl ( aluControl   ) 
+        .aluControl ( aluControl   ),
+        .func1Start ( exFunc1Start )
     );
 
+    ex_a3plus2cbrtb func(
+        .clk_i       ( clk          ),
+        .start_i     ( exFunc1Start ),
+        .a_bi        ( rd1          ),
+        .b_bi        ( rd2          ),
+        .busy_o      ( busy         ),
+        .out         ( ex_func1_out )
+    );
 endmodule
 
 module sr_decode
@@ -166,8 +180,9 @@ module sr_control
     output           pcSrc, 
     output reg       regWrite, 
     output reg       aluSrc,
-    output reg       wdSrc,
-    output reg [2:0] aluControl
+    output reg [1:0] wdSrc,
+    output reg [2:0] aluControl,
+    output reg       func1Start
 );
     reg          branch;
     reg          condZero;
@@ -178,7 +193,8 @@ module sr_control
         condZero    = 1'b0;
         regWrite    = 1'b0;
         aluSrc      = 1'b0;
-        wdSrc       = 1'b0;
+        wdSrc       = 2'b0;
+        func1Start  = 1'b0;
         aluControl  = `ALU_ADD;
 
         casez( {cmdF7, cmdF3, cmdOp} )
@@ -189,10 +205,11 @@ module sr_control
             { `RVF7_SUB,  `RVF3_SUB,  `RVOP_SUB  } : begin regWrite = 1'b1; aluControl = `ALU_SUB;  end
 
             { `RVF7_ANY,  `RVF3_ADDI, `RVOP_ADDI } : begin regWrite = 1'b1; aluSrc = 1'b1; aluControl = `ALU_ADD; end
-            { `RVF7_ANY,  `RVF3_ANY,  `RVOP_LUI  } : begin regWrite = 1'b1; wdSrc  = 1'b1; end
+            { `RVF7_ANY,  `RVF3_ANY,  `RVOP_LUI  } : begin regWrite = 1'b1; wdSrc  = 2'b1; end
 
             { `RVF7_ANY,  `RVF3_BEQ,  `RVOP_BEQ  } : begin branch = 1'b1; condZero = 1'b1; aluControl = `ALU_SUB; end
             { `RVF7_ANY,  `RVF3_BNE,  `RVOP_BNE  } : begin branch = 1'b1; aluControl = `ALU_SUB; end
+            { `RVF7_ANY,  `RVF3_ANY,  `RVOP_FUNC1} : begin regWrite = 1'b1; func1Start = 1'b1; wdSrc = 2'h2; end // func1
         endcase
     end
 endmodule
