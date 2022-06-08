@@ -125,8 +125,8 @@ mult b_square_calc(
 
 always @(posedge clk_i)
     if (rst_i) begin
-        m <= 1;
-        res <= 1;
+        m <= 2;
+        res <= 0;
         state <= IDLE;
         out <= 0;
         start_mult <= 1'b0;
@@ -145,8 +145,8 @@ always @(posedge clk_i)
                     else begin 
                         state <= WORK;
                         x_b <= x_bi;
-                        m <= 1;
-                        res <= 1;
+                        m <= 2;
+                        res <= 0;
                     end
                 end
                 end
