@@ -71,6 +71,7 @@ module sr_cpu
     wire [31:0] rd2;
     wire [31:0] wd3;
     wire [31:0] ex_func1_out;
+    wire [31:0] ex_func2_out;
 
     sm_register_file rf (
         .clk        ( clk          ),
@@ -92,7 +93,7 @@ module sr_cpu
     wire [31:0] srcB = aluSrc ? immI : rd2;
     wire [31:0] aluResult;
 
-    assign wd3 = wdSrc == 2'h0 ? aluResult : wdSrc == 2'h1 ? immU : ex_func1_out;
+    assign wd3 = wdSrc == 2'h0 ? aluResult : wdSrc == 2'h1 ? immU : wdSrc == 2'h2 ? ex_func1_out : ex_func2_out;
 
     sr_alu alu (
         .srcA       ( rd1          ),
@@ -118,13 +119,19 @@ module sr_cpu
         .func1Start ( exFunc1Start )
     );
 
-    ex_a3plus2cbrtb func(
+    ex_a3plus2cbrtb func1(
         .clk_i       ( clk          ),
         .start_i     ( exFunc1Start ),
         .a_bi        ( rd1          ),
         .b_bi        ( rd2          ),
         .busy_o      ( busy         ),
         .out         ( ex_func1_out )
+    );
+
+    ex_vadd8 func2(
+        .a_bi        ( rd1          ),
+        .b_bi        ( rd2          ),
+        .out         ( ex_func2_out )
     );
 endmodule
 
@@ -210,6 +217,7 @@ module sr_control
             { `RVF7_ANY,  `RVF3_BEQ,  `RVOP_BEQ  } : begin branch = 1'b1; condZero = 1'b1; aluControl = `ALU_SUB; end
             { `RVF7_ANY,  `RVF3_BNE,  `RVOP_BNE  } : begin branch = 1'b1; aluControl = `ALU_SUB; end
             { `RVF7_ANY,  `RVF3_ANY,  `RVOP_FUNC1} : begin regWrite = 1'b1; func1Start = 1'b1; wdSrc = 2'h2; end // func1
+            { `RVF7_ANY,  `RVF3_ANY,  `RVOP_FUNC2} : begin regWrite = 1'b1; wdSrc = 2'h3; end // func2
         endcase
     end
 endmodule
